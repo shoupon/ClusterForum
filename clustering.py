@@ -7,21 +7,27 @@ import unittest
 # represent distance between vertices
 # n: number of clusters
 # w: the key to the weight attribute of graph G
-def clusters(G, n, w='weight', num_iteration=8):
-    # randomly pick n vertices
-    centroids = random.sample(G.nodes(), n)
-    for it in range(num_iteration):
-        clustering = { x:[] for x in centroids }
-        for v in G.nodes():
-            clustering[assign_cluster(G, v, centroids, w)] += [v]
-        centroids = [centroid(G, clustering[k], w) for k in clustering.keys()]
-        #print clustering
-        #print centroids
-    return clustering
+def clusters(G, n, w='weight', num_iteration=8, num_jteration=8):
+    m = sys.maxint
+    for jt in range(num_jteration):
+        # randomly pick n vertices
+        centroids = random.sample(G.nodes(), n)
+        for it in range(num_iteration):
+            clustering = { x:[] for x in centroids }
+            for v in G.nodes():
+                clustering[assign_cluster(G, v, centroids, w)] += [v]
+            centroids = [centroid(G, clustering[k], w) for k in clustering.keys()]
+            #print clustering
+            #print centroids
+        subtotal = sum([total_dist(G, clustering[k], k, w) for k in clustering.keys()])
+        if subtotal < m:
+            m = subtotal
+            ret = clustering
+    return ret
 
-def total_dist(G, cluster, centroid, w):
-    assert centroid in cluster
-    return sum([G[centroid][v][w] for v in cluster if v != centroid])
+def total_dist(G, cluster, cent, w):
+    assert cent in cluster
+    return sum([G[cent][v][w] for v in cluster if v != cent])
 
 # cluster is a list containing all the nodes assigned to the cluster
 def centroid(G, cluster, w):
@@ -79,7 +85,6 @@ class TestClustering(unittest.TestCase):
         self.g2[8][9]['w'] = 2
 
 
-
     def test_assign(self):
         centroids = [0, 6]
         self.assertEqual(assign_cluster(self.g1, 0, centroids, 'w'), 0)
@@ -98,8 +103,27 @@ class TestClustering(unittest.TestCase):
 
     def test_clustering(self):
         result = clusters(self.g2, 2, 'w')
+        # should returns 2 clusters: [0,1,2,3,4], [5,6,7,8,9]
+        self.assertEqual([0,1,2,3,4] in result.values(), True)
+        self.assertEqual([0,3,4] in result.values(), False)
+        self.assertEqual([0,1,2,3] in result.values(), False)
+        self.assertEqual([0,1] in result.values(), False)
+        self.assertEqual([5,6,7,8,9] in result.values(), True)
+        self.assertEqual([9] in result.values(), False)
+        self.assertEqual([7,8,9] in result.values(), False)
+        self.assertEqual([8,9] in result.values(), False)
+        self.assertEqual([5,6,7] in result.values(), False)
         print result
-        result = clusters(self.g2, 3, 'w')
+        result = clusters(self.g2, 3, 'w')  
+        self.assertEqual([0,1,2,3,4] in result.values(), True)
+        self.assertEqual([0,3,4] in result.values(), False)
+        self.assertEqual([0,1,2,3] in result.values(), False)
+        self.assertEqual([0,1] in result.values(), False)
+        self.assertEqual([5,6,7,8,9] in result.values(), False)
+        self.assertEqual([9] in result.values(), False)
+        self.assertEqual([7,8,9] in result.values(), False)
+        self.assertEqual([8,9] in result.values(), True)
+        self.assertEqual([5,6,7] in result.values(), True)
         print result
 
 
