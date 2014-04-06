@@ -65,10 +65,11 @@ def create(G, pid, cid):
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(topic_id, stances):
+    i = -1
     for comments in stances.values():
-        i = 0
         for cid in comments:
-            comments_collection.update({"_id": cid}, {"$set":{"stance":i}})
+            com = comments_collection.find_one({"_id":ObjectId(cid)})
+            comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance":i}})
         i += 1
 
 
@@ -131,7 +132,7 @@ comments_collection = db['comments']
 #job = {"message": "grapher.py is running"}
 #print jobs_collection.insert(job)
 
-# Build graph from current content in MongoDB
+print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['target_id'])
@@ -156,9 +157,14 @@ for p in proxies:
         for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):            
             Gs[tid][str(ai)][str(di)]['weight'] += delta
 
-# Compute initial clusters
+print 'Assigning initial stances'
 for tid in Gs.keys():
-    update_stances(tid, clusters(Gs[tid], NUM_CLUSTERS, 'weight'))
+    if len(Gs[tid].nodes()) < NUM_CLUSTERS:
+        update_stances(tid, clusters(Gs[tid], 1, 'weight'))
+        print clusters(Gs[tid], 1, 'weight')
+    else:
+        update_stances(tid, clusters(Gs[tid], NUM_CLUSTERS, 'weight'))
+        print clusters(Gs[tid], NUM_CLUSTERS, 'weight')
 
 #for (x,y) in Gs.items():
 #    print x
@@ -175,6 +181,7 @@ else:
 ps = rc.pubsub()
 ps.subscribe(['jobqueue'])
 
+print 'Listen from redis pub/sub'
 for item in ps.listen():
     if item['type'] == 'message':
         job = json.loads(item['data'])
