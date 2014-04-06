@@ -8,12 +8,17 @@ import networkx as nx
 import urlparse
 from itertools import combinations, product
 
+from clustering import clusters
+
 Gs = {}
+count = {}
+PERIOD = 5 # run clustering every 5 updates
+NUM_CLUSTERS = 3
 delta = 1
 
 def adjust_preference(G, pid, cid, offset):
     print 'before adjustment'
-    graph_status(G)
+    #graph_status(G)
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
     #works = comments_collection.find({"owner_id":ObjectId(pid)})
     #for widobj in works:
@@ -31,7 +36,7 @@ def adjust_preference(G, pid, cid, offset):
             print 'disapproval'
             G[str(didobj)][cid]['weight'] += offset
     print 'after adjustment'
-    graph_status(G)
+    #graph_status(G)
 
 def like(G, pid, cid):
     print 'like'
@@ -58,6 +63,15 @@ def create(G, pid, cid):
         G[cid][node]['weight'] = 0
     like(G, pid, cid)
 
+# stances are given in the form of clusters (dictionary)
+def update_stances(topic_id, stances):
+    for comments in stances.values():
+        i = 0
+        for cid in comments:
+            comments_collection.update({"_id": cid}, {"$set": "stance":i})
+        i += 1
+
+
 def process_job(job):
     global Gs
     tid = job['group']['$oid']
@@ -65,6 +79,8 @@ def process_job(job):
     cid = job['post']['$oid']
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
+        count[tid] = 0
+
     y = job['action']
     if y == 'like':
         like(Gs[tid], pid, cid)
@@ -79,6 +95,12 @@ def process_job(job):
     else:
         # should throw an exception here
         pass
+
+    count[tid] += 1
+    if count[tid] >= PERIOD:
+        stances = clusters(Gs[tid], NUM_CLUSTERS, 'weight') 
+        update_stances(tid, stances)
+        count[tid] = 0
 
 # for debugging
 def graph_status(G):
@@ -102,9 +124,9 @@ else:
 proxies_collection = db['proxies']
 comments_collection = db['comments']
 # To test if grapher.py is up running and can connect to MongoLab
-jobs_collection = db['jobs']
-job = {"message": "grapher.py is running"}
-print jobs_collection.insert(job)
+#jobs_collection = db['jobs']
+#job = {"message": "grapher.py is running"}
+#print jobs_collection.insert(job)
 
 # Build graph from current content in MongoDB
 comments = comments_collection.find()
@@ -131,9 +153,13 @@ for p in proxies:
         for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):            
             Gs[tid][str(ai)][str(di)]['weight'] += delta
 
-for (x,y) in Gs.items():
-    print x
-    graph_status(y)
+# Compute initial clusters
+for tid in Gs.keys():
+    update_stances(tid, clusters(Gs[tid], NUM_CLUSTERS, 'weight'))
+
+#for (x,y) in Gs.items():
+#    print x
+#    graph_status(y)
 
 # subscribe to Redis To Go
 redistogo = True
