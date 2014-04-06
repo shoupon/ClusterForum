@@ -1,1 +1,1 @@
-worker: python worker/grapher.py
+worker: python grapher.py
