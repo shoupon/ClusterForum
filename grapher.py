@@ -68,7 +68,7 @@ def update_stances(topic_id, stances):
     for comments in stances.values():
         i = 0
         for cid in comments:
-            comments_collection.update({"_id": cid}, {"$set":{{"stance":i}})
+            comments_collection.update({"_id": cid}, {"$set":{"stance":i}})
         i += 1
 
 
