@@ -13,7 +13,7 @@ from clustering import clusters
 Gs = {}
 count = {}
 PERIOD = 5 # run clustering every 5 updates
-NUM_CLUSTERS = 3
+NUM_CLUSTERS = 2
 delta = 1
 
 def adjust_preference(G, pid, cid, offset):
@@ -98,7 +98,10 @@ def process_job(job):
 
     count[tid] += 1
     if count[tid] >= PERIOD:
-        stances = clusters(Gs[tid], NUM_CLUSTERS, 'weight') 
+        if len(Gs[tid].nodes()) < NUM_CLUSTERS:
+            stances = clusters(Gs[tid], 1, 'weight') 
+        else:
+            stances = clusters(Gs[tid], NUM_CLUSTERS, 'weight') 
         update_stances(tid, stances)
         count[tid] = 0
 
