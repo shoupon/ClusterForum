@@ -13,7 +13,7 @@ from clustering import clusters
 Gs = {}
 count = {}
 PERIOD = 5 # run clustering every 5 updates
-NUM_CLUSTERS = 2
+NUM_CLUSTERS = 3
 delta = 1
 
 def adjust_preference(G, pid, cid, offset):
@@ -157,7 +157,7 @@ for p in proxies:
         for (di, dj) in combinations(p['disapproval_ids'], 2):
             Gs[tid][str(di)][str(dj)]['weight'] -= delta
     if 'approval_ids' in p.keys() and 'disapproval_ids' in p.keys():
-        for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):            
+        for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):           
             Gs[tid][str(ai)][str(di)]['weight'] += delta
 
 print 'Assigning initial stances'
