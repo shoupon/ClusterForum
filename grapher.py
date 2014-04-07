@@ -65,11 +65,13 @@ def create(G, pid, cid):
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(topic_id, stances):
-    i = -1
+    i = 1
     for comments in stances.values():
+        # get stance document with number i
+        stance = stances_collection.find_one({"number":i})
+        sidobj = stance["_id"]
         for cid in comments:
-            com = comments_collection.find_one({"_id":ObjectId(cid)})
-            comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance":i}})
+            comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj}})
         i += 1
 
 
@@ -127,6 +129,7 @@ else:
 
 proxies_collection = db['proxies']
 comments_collection = db['comments']
+stances_collection = db['stances']
 # To test if grapher.py is up running and can connect to MongoLab
 #jobs_collection = db['jobs']
 #job = {"message": "grapher.py is running"}
@@ -135,7 +138,7 @@ comments_collection = db['comments']
 print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
 for c in comments:
-    tid = str(c['target_id'])
+    tid = str(c['topic_id'])
     cid = str(c['_id'])
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
