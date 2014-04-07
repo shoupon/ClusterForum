@@ -68,7 +68,8 @@ def update_stances(topic_id, stances):
     i = 1
     for comments in stances.values():
         # get stance document with number i
-        stance = stances_collection.find_one({"number":i})
+        stance = stances_collection.find_one({"topic_id":ObjectId(topic_id), "number":i})
+        print stance
         sidobj = stance["_id"]
         for cid in comments:
             comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj}})
