@@ -13,7 +13,7 @@ from clustering import clusters
 
 Gs = {}
 count = {}
-PERIOD = 1 # run clustering every 5 updates
+PERIOD = 10 # run clustering every 5 updates
 NUM_CLUSTERS = 3
 MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
@@ -37,7 +37,7 @@ def connect_mongodb(remote=False):
     #jobs_collection = db['jobs']
     #job = {"message": "new connection is established"}
     #print jobs_collection.insert(job)
-    #return db
+    return db
 
 db = connect_mongodb(MONGOLAB)
 proxies_collection = db['proxies']
@@ -98,14 +98,6 @@ def oppose(G, pid, cid):
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(topic_id, stances):
-    db = connect_mongodb(MONGOLAB)
-    # To test if successfully connects to MongoLab
-    #jobs_collection = db['jobs']
-    #job = {"message": "new connection is established"+"update_stance"}
-    #print jobs_collection.insert(job)
-
-    stances_collection = db['stances']
-    comments_collection = db['comments']
     i = 1
     for comments in stances.values():
         # get stance document with number i
@@ -170,11 +162,6 @@ def process_job(job):
 def graph_status(G):
     print [(n,G[n]) for n in G.nodes()]
 
-
-db = connect_mongodb(MONGOLAB)
-proxies_collection = db['proxies']
-comments_collection = db['comments']
-stances_collection = db['stances']
 
 print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
