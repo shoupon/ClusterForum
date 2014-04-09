@@ -7,20 +7,45 @@ from bson.objectid import ObjectId
 import networkx as nx
 import urlparse
 from itertools import combinations, product
+from multiprocessing import Process
 
 from clustering import clusters
 
 Gs = {}
 count = {}
-PERIOD = 5 # run clustering every 5 updates
+PERIOD = 1 # run clustering every 5 updates
 NUM_CLUSTERS = 3
 MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
 DELTA = delta
+MONGOLAB = True
+
+# connect to MongoDB
+# remote = True if connecting to MongoLab, 
+#          False if connecting to local MongoDB server
+def connect_mongodb(remote=False):
+    if remote:
+        mongo_connection = MongoClient(os.environ['MONGOLAB_URI'])
+        mongo_uri = os.environ['MONGOLAB_URI']
+        parseobj = urlparse.urlparse(mongo_uri)
+        dbname = parseobj.path[1:]
+        db = mongo_connection[dbname]
+    else: 
+        mongo_connection = MongoClient()
+        db = mongo_connection["plato_forum_development"]
+    # To test if successfully connects to MongoLab
+    #jobs_collection = db['jobs']
+    #job = {"message": "new connection is established"}
+    #print jobs_collection.insert(job)
+    #return db
+
+db = connect_mongodb(MONGOLAB)
+proxies_collection = db['proxies']
+comments_collection = db['comments']
+stances_collection = db['stances']
+
 
 def adjust_preference(G, pid, cid, offset):
-    print 'before adjustment'
-    #graph_status(G)
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
     #works = comments_collection.find({"owner_id":ObjectId(pid)})
     #for widobj in works:
@@ -37,8 +62,6 @@ def adjust_preference(G, pid, cid, offset):
         for didobj in proxy['disapproval_ids']:
             print 'disapproval'
             G[str(didobj)][cid]['weight'] += offset
-    print 'after adjustment'
-    #graph_status(G)
 
 def like(G, pid, cid):
     print 'like'
@@ -70,10 +93,19 @@ def support(G, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
 
 def oppose(G, pid, cid):
+    print 'oppose'
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(topic_id, stances):
+    db = connect_mongodb(MONGOLAB)
+    # To test if successfully connects to MongoLab
+    #jobs_collection = db['jobs']
+    #job = {"message": "new connection is established"+"update_stance"}
+    #print jobs_collection.insert(job)
+
+    stances_collection = db['stances']
+    comments_collection = db['comments']
     i = 1
     for comments in stances.values():
         # get stance document with number i
@@ -87,6 +119,17 @@ def update_stances(topic_id, stances):
             comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj}})
         i += 1
 
+def run_cluster(G, tid):
+    print 'Clustering worker spawned'
+    if hasattr(os, 'getppid'):
+        print 'parent process:', os.getppid()
+    print 'process id:', os.getpid()
+
+    if len(G.nodes()) < NUM_CLUSTERS:
+        stances = clusters(G, 1, 'weight') 
+    else:
+        stances = clusters(G, NUM_CLUSTERS, 'weight') 
+    update_stances(tid, stances)
 
 def process_job(job):
     global Gs
@@ -95,6 +138,7 @@ def process_job(job):
     cid = job['post']['$oid']
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
+    if tid not in count.keys():
         count[tid] = 0
 
     y = job['action']
@@ -118,11 +162,8 @@ def process_job(job):
 
     count[tid] += 1
     if count[tid] >= PERIOD:
-        if len(Gs[tid].nodes()) < NUM_CLUSTERS:
-            stances = clusters(Gs[tid], 1, 'weight') 
-        else:
-            stances = clusters(Gs[tid], NUM_CLUSTERS, 'weight') 
-        update_stances(tid, stances)
+        p = Process(target=run_cluster, args=(Gs[tid].copy(),tid))
+        p.start()
         count[tid] = 0
 
 # for debugging
@@ -130,27 +171,10 @@ def graph_status(G):
     print [(n,G[n]) for n in G.nodes()]
 
 
-# connect to MongoDB
-mongolab = True
-# True if connecting to MongoLab, 
-# False if connecting to local MongoDB server
-if mongolab:
-    mongo_connection = MongoClient(os.environ['MONGOLAB_URI'])
-    mongo_uri = os.environ['MONGOLAB_URI']
-    parseobj = urlparse.urlparse(mongo_uri)
-    dbname = parseobj.path[1:]
-    db = mongo_connection[dbname]
-else:
-    mongo_connection = MongoClient()
-    db = mongo_connection["plato_forum_development"]
-
+db = connect_mongodb(MONGOLAB)
 proxies_collection = db['proxies']
 comments_collection = db['comments']
 stances_collection = db['stances']
-# To test if grapher.py is up running and can connect to MongoLab
-#jobs_collection = db['jobs']
-#job = {"message": "grapher.py is running"}
-#print jobs_collection.insert(job)
 
 print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
@@ -193,14 +217,8 @@ print 'Assigning initial stances'
 for tid in Gs.keys():
     if len(Gs[tid].nodes()) < NUM_CLUSTERS:
         update_stances(tid, clusters(Gs[tid], 1, 'weight'))
-        print clusters(Gs[tid], 1, 'weight')
     else:
         update_stances(tid, clusters(Gs[tid], NUM_CLUSTERS, 'weight'))
-        print clusters(Gs[tid], NUM_CLUSTERS, 'weight')
-
-#for (x,y) in Gs.items():
-#    print x
-#    graph_status(y)
 
 # subscribe to Redis To Go
 redistogo = True
