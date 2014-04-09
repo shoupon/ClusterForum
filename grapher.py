@@ -14,7 +14,9 @@ Gs = {}
 count = {}
 PERIOD = 5 # run clustering every 5 updates
 NUM_CLUSTERS = 3
+MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
+DELTA = delta
 
 def adjust_preference(G, pid, cid, offset):
     print 'before adjustment'
@@ -63,14 +65,24 @@ def create(G, pid, cid):
         G[cid][node]['weight'] = 0
     like(G, pid, cid)
 
+def support(G, pid, cid):
+    print 'support'
+    G[pid][cid]['weight'] -= MULTIPLIER*DELTA
+
+def oppose(G, pid, cid):
+    G[pid][cid]['weight'] -= MULTIPLIER*DELTA
+
 # stances are given in the form of clusters (dictionary)
 def update_stances(topic_id, stances):
     i = 1
     for comments in stances.values():
         # get stance document with number i
         stance = stances_collection.find_one({"topic_id":ObjectId(topic_id), "number":i})
-        print stance
-        sidobj = stance["_id"]
+        if stance:
+            sidobj = stance["_id"]
+        else:
+            sidobj = stances_collection.insert({"topic_id":ObjectId(topic_id), "number":i})
+
         for cid in comments:
             comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj}})
         i += 1
@@ -96,6 +108,10 @@ def process_job(job):
         undislike(Gs[tid], pid, cid)
     elif y == 'create':
         create(Gs[tid], pid, cid)
+    elif y == 'support':
+        support(Gs[tid], pid, cid)
+    elif y == 'oppose':
+        oppose(Gs[tid], pid, cid)
     else:
         # should throw an exception here
         pass
@@ -147,6 +163,18 @@ for c in comments:
     for n in Gs[tid].nodes():
         Gs[tid].add_edge(n, cid)
         Gs[tid][n][cid]['weight'] = 0
+
+comments = comments_collection.find()
+for c in comments:
+    tid = str(c['topic_id'])
+    cid = str(c['_id'])
+    if 'opposing_ids' in c.keys():
+        for oidobj in c['opposing_ids']:
+            Gs[tid][str(oidobj)][cid]['weight'] += MULTIPLIER*DELTA
+    if 'supporting_ids' in c.keys():
+        for sidobj in c['supporting_ids']:
+            Gs[tid][str(sidobj)][cid]['weight'] -= MULTIPLIER*DELTA
+
 
 proxies = proxies_collection.find()
 for p in proxies:
