@@ -55,8 +55,6 @@ def adjust_preference(G, pid, cid, offset):
     if 'approval_ids' in proxy.keys():
         for aidobj in proxy['approval_ids']:
             print 'approval'
-            print str(aidobj)
-            print cid
             G[str(aidobj)][cid]['weight'] -= offset
     if 'disapproval_ids' in proxy.keys():
         for didobj in proxy['disapproval_ids']:
@@ -64,24 +62,19 @@ def adjust_preference(G, pid, cid, offset):
             G[str(didobj)][cid]['weight'] += offset
 
 def like(G, pid, cid):
-    print 'like'
     global delta
     adjust_preference(G, pid, cid, delta)
 def unlike(G, pid, cid):
-    print 'unlike'
     global delta
     adjust_preference(G, pid, cid, -delta)
 
 def dislike(G, pid, cid):
-    print 'dislike'
     unlike(G, pid, cid)
 
 def undislike(G, pid, cid):
-    print 'undislike'
     like(G, pid, cid)
 
 def create(G, pid, cid):
-    print 'create'
     G.add_node(cid)
     for node in G.nodes():
         G.add_edge(cid, node)
@@ -158,6 +151,8 @@ def process_job(job):
         p = Process(target=run_cluster, args=(Gs[tid],tid))
         p.start()
         count[tid] = 0
+
+    print count
 
 # for debugging
 def graph_status(G):
