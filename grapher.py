@@ -111,11 +111,12 @@ def update_stances(topic_id, stances):
             comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj}})
         i += 1
 
-def run_cluster(G, tid):
+def run_cluster(G0, tid):
     print 'Clustering worker spawned'
     if hasattr(os, 'getppid'):
         print 'parent process:', os.getppid()
     print 'process id:', os.getpid()
+    G = G0.copy()
 
     if len(G.nodes()) < NUM_CLUSTERS:
         stances = clusters(G, 1, 'weight') 
@@ -154,7 +155,7 @@ def process_job(job):
 
     count[tid] += 1
     if count[tid] >= PERIOD:
-        p = Process(target=run_cluster, args=(Gs[tid].copy(),tid))
+        p = Process(target=run_cluster, args=(Gs[tid],tid))
         p.start()
         count[tid] = 0
 
