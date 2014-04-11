@@ -117,10 +117,13 @@ def run_cluster(G0, tid):
 
 def process_job(job):
     global Gs
-    print 'Job: ' + str(job)
+    #print 'Job: ' + str(job)
 
     tid = job['group']['$oid']
-    pid = job['who']['$oid']
+    if job['who']:
+        pid = job['who']['$oid']
+    elif job['target']:
+        pid = job['target']['$oid']
     cid = job['post']['$oid']
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
@@ -152,7 +155,6 @@ def process_job(job):
         p.start()
         count[tid] = 0
 
-    print count
 
 # for debugging
 def graph_status(G):
