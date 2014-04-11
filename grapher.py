@@ -54,11 +54,9 @@ def adjust_preference(G, pid, cid, offset):
     #    G[str(widobj['_id'])][cid]['weight'] -= offset
     if 'approval_ids' in proxy.keys():
         for aidobj in proxy['approval_ids']:
-            print 'approval'
             G[str(aidobj)][cid]['weight'] -= offset
     if 'disapproval_ids' in proxy.keys():
         for didobj in proxy['disapproval_ids']:
-            print 'disapproval'
             G[str(didobj)][cid]['weight'] += offset
 
 def like(G, pid, cid):
@@ -119,6 +117,8 @@ def run_cluster(G0, tid):
 
 def process_job(job):
     global Gs
+    print 'Job: ' + str(job)
+
     tid = job['group']['$oid']
     pid = job['who']['$oid']
     cid = job['post']['$oid']
