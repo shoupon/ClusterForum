@@ -50,6 +50,9 @@ topics_collection = db['topics']
 
 def adjust_preference(G, pid, cid, offset):
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
+    if not proxy:
+        print 'Proxy not found: ' + str(ObjectId(pid))
+        return
     #works = comments_collection.find({"owner_id":ObjectId(pid)})
     #for widobj in works:
     #    print widobj['_id']
