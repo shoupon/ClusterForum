@@ -12,6 +12,8 @@ from multiprocessing import Process
 from clustering import clusters
 
 Gs = {}
+yesno_topics = set()
+open_topics = set()
 count = {}
 PERIOD = 10 # run clustering every 5 updates
 NUM_CLUSTERS = 3
@@ -43,6 +45,7 @@ db = connect_mongodb(MONGOLAB)
 proxies_collection = db['proxies']
 comments_collection = db['comments']
 stances_collection = db['stances']
+topics_collection = db['topics']
 
 
 def adjust_preference(G, pid, cid, offset):
@@ -160,11 +163,37 @@ def process_job(job):
 def graph_status(G):
     print [(n,G[n]) for n in G.nodes()]
 
+def is_yesno(tid):
+    if tid in yesno_topics:
+        #print 'Yesno topic from set'
+        return True
+    else:
+        if tid in open_topics:
+            #print 'Open topic from set'
+            return False
+        else:
+            t = topics_collection.find_one({"_id":ObjectId(tid)})
+            ttype = t['topic_type']
+            if ttype == 'yesno':
+                yesno_topics.add(tid)
+                #print 'Yesno topic from MongoDB'
+                return True 
+            elif ttype == 'open':
+                open_topics.add(tid)
+                #print 'Open topic from MongoDB'
+                return False
+            else:
+                print 'Unknown topic'
+                # should throw exception here
+                return False
+ 
 
 print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['topic_id'])
+    if is_yesno(tid):
+        continue
     cid = str(c['_id'])
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
@@ -176,6 +205,8 @@ for c in comments:
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['topic_id'])
+    if is_yesno(tid):
+        continue
     cid = str(c['_id'])
     if 'opposing_ids' in c.keys():
         for oidobj in c['opposing_ids']:
@@ -188,6 +219,8 @@ for c in comments:
 proxies = proxies_collection.find()
 for p in proxies:
     tid = str(p['topic_id'])
+    if is_yesno(tid):
+        continue
     if 'approval_ids' in p.keys():
         for (ai, aj) in combinations(p['approval_ids'], 2):
             Gs[tid][str(ai)][str(aj)]['weight'] -= delta
