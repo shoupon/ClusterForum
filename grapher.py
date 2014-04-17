@@ -7,6 +7,7 @@ from bson.objectid import ObjectId
 import networkx as nx
 import urlparse
 from itertools import combinations, product
+from operator import itemgetter
 from multiprocessing import Process
 
 from clustering import clusters
@@ -95,8 +96,22 @@ def oppose(G, pid, cid):
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(topic_id, stances):
-    i = 1
+    used = set()
     for comments in stances.values():
+        stance_counts = {x+1:0 for x in range(NUM_CLUSTERS)}
+        for cid in comments:
+            c = comments_collection.find_one({"_id":ObjectId(cid)})
+            s = stances_collection.find_one({'_id':c['stance_id']})
+            stance_counts[s['number']] += 1
+        while True:
+            i = max(stance_counts.iteritems(), key=itemgetter(1))[0]
+            if i in used:
+                stance_counts[i] = -1
+                continue
+            else:
+                used.add(i)
+                break
+
         # get stance document with number i
         stance = stances_collection.find_one({"topic_id":ObjectId(topic_id), "number":i})
         if stance:
