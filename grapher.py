@@ -121,8 +121,14 @@ def oppose(G, pid, cid):
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(tid, stances, ranking):
+    if is_yesno(tid):
+        for comments in stances.values():
+            for cid in comments:
+                comments_collection.update({"_id":ObjectId(cid)},
+                                           {"$set":{"importance_factor":ranking[cid]}})
+        return
+
     used = set()
-    #i = 1
     for comments in stances.values():
         stance_counts = {x+1:0 for x in range(NUM_CLUSTERS)}
         for cid in comments:
@@ -145,17 +151,11 @@ def update_stances(tid, stances, ranking):
         else:
             sidobj = stances_collection.insert({"topic_id":ObjectId(tid), "number":i})
 
-        if is_yesno(tid):
-        #if False:
-            for cid in comments:
-                comments_collection.update({"_id":ObjectId(cid)},
-                                           {"$set":{"importance_factor":ranking[cid]}})
-        else:
-            for cid in comments:
-                comments_collection.update({"_id":ObjectId(cid)}, 
-                                           {"$set":{"stance_id":sidobj, 
-                                                    "importance_factor":ranking[cid]}})
-        #i += 1
+        for cid in comments:
+            comments_collection.update({"_id":ObjectId(cid)}, 
+                                       {"$set":{"stance_id":sidobj, 
+                                                "importance_factor":ranking[cid]}})
+
 
 def run_cluster(G0, tid):
     print 'Clustering worker spawned'
