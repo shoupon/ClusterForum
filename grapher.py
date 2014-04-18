@@ -24,7 +24,8 @@ MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
 DELTA = delta
 OPPOSE_W = 2
-SUPPORT_W = 5
+SUPPORT_W = 6
+CREATE_W = 1.5
 
 MONGOLAB = True
 
@@ -127,16 +128,29 @@ def create(G, D, pid, cid):
         G.add_edge(cid, node)
         G[cid][node]['weight'] = 0
     like(G, D, pid, cid)
+    proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
+    if not proxy:
+        print 'Proxy not found: ' + str(ObjectId(pid))
+        return
+    if 'approval_ids' in proxy.keys():
+        for aidobj in proxy['approval_ids']:
+            D.add_edge(cid, str(aidobj))
+    if 'work_ids' in proxy.keys():
+        for widobj in proxy['work_ids']:
+            D.add_edge(cid, str(widobj))
+            D[cid][str(widobj)][WEIGHT] = CREATE_W
+            D.add_edge(str(widobj), cid)
+            D[str(widobj)][cid][WEIGHT] = CREATE_W
 
 def support(G, D, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
     D.add_edge(cid, pid)
-    D[pid][cid][WEIGHT] = SUPPORT_W
+    D[cid][pid][WEIGHT] = SUPPORT_W
 
 def oppose(G, D, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
     D.add_edge(cid, pid)
-    D[pid][cid][WEIGHT] = OPPOSE_W
+    D[cid][pid][WEIGHT] = OPPOSE_W
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(tid, stances, ranking):
