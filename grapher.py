@@ -79,28 +79,13 @@ def is_yesno(tid):
                 return False
  
 
-def adjust_preference(G, D, pid, cid, offset):
+def adjust_undirected(G, pid, cid, offset):
     #for e in D.edges():
     #    print e
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
     if not proxy:
         print 'Proxy not found: ' + str(ObjectId(pid))
         return
-    #works = comments_collection.find({"owner_id":ObjectId(pid)})
-    #for widobj in works:
-    #    print widobj['_id']
-    #    print str(widobj['_id'])
-    #    G[str(widobj['_id'])][cid]['weight'] -= offset
-    works = comments_collection.find({"owner_id":ObjectId(pid)})
-    for w in works:
-        widobj = w['_id']
-        if offset > 0:
-            #print 'add_edge: ' + str(widobj) + ',' + str(cid)
-            D.add_edge(str(widobj), cid) 
-        else:
-            #print 'remove_edge: ' + str(widobj) + ',' + str(cid)
-            if WEIGHT not in D[str(widobj)][cid].keys():
-                D.remove_edge(str(widobj), cid) 
 
     if 'approval_ids' in proxy.keys():
         for aidobj in proxy['approval_ids']:
@@ -109,25 +94,43 @@ def adjust_preference(G, D, pid, cid, offset):
         for didobj in proxy['disapproval_ids']:
             G[str(didobj)][cid]['weight'] += offset
 
+def adjust_directed(D, pid, cid, upvote=True):
+    works = comments_collection.find({"owner_id":ObjectId(pid)})
+    for w in works:
+        widobj = w['_id']
+        if upvote:
+            #print 'add_edge: ' + str(widobj) + ',' + str(cid)
+            D.add_edge(str(widobj), cid) 
+        else:
+            if WEIGHT not in D[str(widobj)][cid].keys():
+                #print 'remove_edge: ' + str(widobj) + ',' + str(cid)
+                D.remove_edge(str(widobj), cid) 
+
+
 def like(G, D, pid, cid):
     global delta
-    adjust_preference(G, D, pid, cid, delta)
+    adjust_undirected(G, pid, cid, delta)
+    adjust_directed(D, pid, cid, upvote=True)
+
 def unlike(G, D, pid, cid):
     global delta
-    adjust_preference(G, D, pid, cid, -delta)
+    adjust_undirected(G, pid, cid, -delta)
+    adjust_directed(D, pid, cid, upvote=False)
 
 def dislike(G, D, pid, cid):
-    unlike(G, D, pid, cid)
+    global delta
+    adjust_undirected(G, pid, cid, -delta)
 
 def undislike(G, D, pid, cid):
-    like(G, D, pid, cid)
+    global delta
+    adjust_undirected(G, pid, cid, delta)
 
 def create(G, D, pid, cid):
     G.add_node(cid)
     for node in G.nodes():
         G.add_edge(cid, node)
         G[cid][node]['weight'] = 0
-    like(G, D, pid, cid)
+    adjust_undirected(G, pid, cid, delta)
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
     if not proxy:
         print 'Proxy not found: ' + str(ObjectId(pid))
@@ -135,12 +138,13 @@ def create(G, D, pid, cid):
     if 'approval_ids' in proxy.keys():
         for aidobj in proxy['approval_ids']:
             D.add_edge(cid, str(aidobj))
-    if 'work_ids' in proxy.keys():
-        for widobj in proxy['work_ids']:
-            D.add_edge(cid, str(widobj))
-            D[cid][str(widobj)][WEIGHT] = CREATE_W
-            D.add_edge(str(widobj), cid)
-            D[str(widobj)][cid][WEIGHT] = CREATE_W
+    #works = comments_collection.find({"owner_id":ObjectId(pid)})
+    #for w in works:
+    #    widobj = w['_id']
+    #    D.add_edge(cid, str(widobj))
+    #    D[cid][str(widobj)][WEIGHT] = CREATE_W
+    #    D.add_edge(str(widobj), cid)
+    #    D[str(widobj)][cid][WEIGHT] = CREATE_W
 
 def support(G, D, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
@@ -293,8 +297,10 @@ for p in proxies:
     tid = str(p['topic_id'])
     # Build DiGraph for page ranking
     # like relation
-    if 'work_ids' in p.keys() and 'approval_ids' in p.keys():
-        for wobj in p['work_ids']:
+    works = comments_collection.find({"owner_id":p['_id']})
+    if 'approval_ids' in p.keys():
+        for w in works:
+            wobj = w['_id']
             for aobj in p['approval_ids']:
                 Ds[tid].add_edge(str(wobj), str(aobj))
     # Build weighted graph for clustering
