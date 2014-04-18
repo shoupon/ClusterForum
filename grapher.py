@@ -49,6 +49,30 @@ comments_collection = db['comments']
 stances_collection = db['stances']
 topics_collection = db['topics']
 
+def is_yesno(tid):
+    if tid in yesno_topics:
+        #print 'Yesno topic from set'
+        return True
+    else:
+        if tid in open_topics:
+            #print 'Open topic from set'
+            return False
+        else:
+            t = topics_collection.find_one({"_id":ObjectId(tid)})
+            ttype = t['topic_type']
+            if ttype == 'yesno':
+                yesno_topics.add(tid)
+                #print 'Yesno topic from MongoDB'
+                return True 
+            elif ttype == 'open':
+                open_topics.add(tid)
+                #print 'Open topic from MongoDB'
+                return False
+            else:
+                print 'Unknown topic'
+                # should throw exception here
+                return False
+ 
 
 def adjust_preference(G, pid, cid, offset):
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
@@ -96,8 +120,9 @@ def oppose(G, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
 
 # stances are given in the form of clusters (dictionary)
-def update_stances(topic_id, stances, ranking):
+def update_stances(tid, stances, ranking):
     used = set()
+    #i = 1
     for comments in stances.values():
         stance_counts = {x+1:0 for x in range(NUM_CLUSTERS)}
         for cid in comments:
@@ -114,15 +139,23 @@ def update_stances(topic_id, stances, ranking):
                 break
 
         # get stance document with number i
-        stance = stances_collection.find_one({"topic_id":ObjectId(topic_id), "number":i})
+        stance = stances_collection.find_one({"topic_id":ObjectId(tid), "number":i})
         if stance:
             sidobj = stance["_id"]
         else:
-            sidobj = stances_collection.insert({"topic_id":ObjectId(topic_id), "number":i})
+            sidobj = stances_collection.insert({"topic_id":ObjectId(tid), "number":i})
 
-        for cid in comments:
-            comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj, "importance_factor":ranking[cid]}})
-        i += 1
+        if is_yesno(tid):
+        #if False:
+            for cid in comments:
+                comments_collection.update({"_id":ObjectId(cid)},
+                                           {"$set":{"importance_factor":ranking[cid]}})
+        else:
+            for cid in comments:
+                comments_collection.update({"_id":ObjectId(cid)}, 
+                                           {"$set":{"stance_id":sidobj, 
+                                                    "importance_factor":ranking[cid]}})
+        #i += 1
 
 def run_cluster(G0, tid):
     print 'Clustering worker spawned'
@@ -182,30 +215,6 @@ def process_job(job):
 def graph_status(G):
     print [(n,G[n]) for n in G.nodes()]
 
-def is_yesno(tid):
-    if tid in yesno_topics:
-        #print 'Yesno topic from set'
-        return True
-    else:
-        if tid in open_topics:
-            #print 'Open topic from set'
-            return False
-        else:
-            t = topics_collection.find_one({"_id":ObjectId(tid)})
-            ttype = t['topic_type']
-            if ttype == 'yesno':
-                yesno_topics.add(tid)
-                #print 'Yesno topic from MongoDB'
-                return True 
-            elif ttype == 'open':
-                open_topics.add(tid)
-                #print 'Open topic from MongoDB'
-                return False
-            else:
-                print 'Unknown topic'
-                # should throw exception here
-                return False
- 
 
 print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
