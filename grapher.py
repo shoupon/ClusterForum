@@ -92,11 +92,11 @@ def adjust_preference(G, D, pid, cid, offset):
         for aidobj in proxy['approval_ids']:
             G[str(aidobj)][cid]['weight'] -= offset
             if offset > 0:
-                print 'add_edge'
+                print 'add_edge: ' + str(cid) + ',' + str(aidobj)
                 D.add_edge(cid, str(aidobj)) 
             else:
                 if WEIGHT not in D[cid][str(aidobj)].keys():
-                    print 'remove_edge'
+                    print 'remove_edge: ' + str(cid) + ',' + str(aidobj)
                     D.remove_edge(cid, str(aidobj)) 
     if 'disapproval_ids' in proxy.keys():
         for didobj in proxy['disapproval_ids']:
@@ -186,7 +186,7 @@ def run_cluster(G0, D0, tid):
 
 def process_job(job):
     global Gs
-    #print 'Job: ' + str(job)
+    print 'Job: ' + str(job)
 
     tid = job['group']['$oid']
     if job['who']:
@@ -196,6 +196,7 @@ def process_job(job):
     cid = job['post']['$oid']
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
+        Ds[tid] = nx.DiGraph()
     if tid not in count.keys():
         count[tid] = 0
 
