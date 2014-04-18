@@ -13,6 +13,7 @@ from multiprocessing import Process
 from clustering import clusters
 
 Gs = {}
+Ds = {}
 yesno_topics = set()
 open_topics = set()
 count = {}
@@ -95,7 +96,7 @@ def oppose(G, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
 
 # stances are given in the form of clusters (dictionary)
-def update_stances(topic_id, stances):
+def update_stances(topic_id, stances, ranking):
     used = set()
     for comments in stances.values():
         stance_counts = {x+1:0 for x in range(NUM_CLUSTERS)}
@@ -120,7 +121,7 @@ def update_stances(topic_id, stances):
             sidobj = stances_collection.insert({"topic_id":ObjectId(topic_id), "number":i})
 
         for cid in comments:
-            comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj}})
+            comments_collection.update({"_id":ObjectId(cid)}, {"$set":{"stance_id":sidobj, "importance_factor":ranking[cid]}})
         i += 1
 
 def run_cluster(G0, tid):
@@ -210,12 +211,14 @@ print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['topic_id'])
-    if is_yesno(tid):
-        continue
+    #if is_yesno(tid):
+    #    continue
     cid = str(c['_id'])
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
+        Ds[tid] = nx.DiGraph()
     Gs[tid].add_node(cid)
+    Ds[tid].add_node(cid)
     for n in Gs[tid].nodes():
         Gs[tid].add_edge(n, cid)
         Gs[tid][n][cid]['weight'] = 0
@@ -223,9 +226,17 @@ for c in comments:
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['topic_id'])
+    cid = str(c['_id'])
+    # Build DiGraph for page ranking
+    if 'opposing_ids' in c.keys():
+        for oidobj in c['opposing_ids']:
+            Ds[tid].add_edge(cid, str(oidobj))
+    if 'supporting_ids' in c.keys():
+        for sidobj in c['supporting_ids']:
+            Ds[tid].add_edge(cid, str(sidobj))
+    # Build weighted graph for clustering
     if is_yesno(tid):
         continue
-    cid = str(c['_id'])
     if 'opposing_ids' in c.keys():
         for oidobj in c['opposing_ids']:
             Gs[tid][str(oidobj)][cid]['weight'] += MULTIPLIER*DELTA
@@ -233,10 +244,16 @@ for c in comments:
         for sidobj in c['supporting_ids']:
             Gs[tid][str(sidobj)][cid]['weight'] -= MULTIPLIER*DELTA
 
-
 proxies = proxies_collection.find()
 for p in proxies:
     tid = str(p['topic_id'])
+    # Build DiGraph for page ranking
+    # like relation
+    if 'work_ids' in p.keys() and 'approval_ids' in p.keys():
+        for wobj in p['work_ids']:
+            for aobj in p['approval_ids']:
+                Ds[tid].add_edge(str(wobj), str(aobj))
+    # Build weighted graph for clustering
     if is_yesno(tid):
         continue
     if 'approval_ids' in p.keys():
@@ -246,15 +263,19 @@ for p in proxies:
         for (di, dj) in combinations(p['disapproval_ids'], 2):
             Gs[tid][str(di)][str(dj)]['weight'] -= delta
     if 'approval_ids' in p.keys() and 'disapproval_ids' in p.keys():
-        for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):           
+        for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):
             Gs[tid][str(ai)][str(di)]['weight'] += delta
 
 print 'Assigning initial stances'
 for tid in Gs.keys():
     if len(Gs[tid].nodes()) < NUM_CLUSTERS:
-        update_stances(tid, clusters(Gs[tid], 1, 'weight'))
+        update_stances(tid,
+                       clusters(Gs[tid], 1, 'weight'),
+                       nx.pagerank(Ds[tid]))
     else:
-        update_stances(tid, clusters(Gs[tid], NUM_CLUSTERS, 'weight'))
+        update_stances(tid, 
+                       clusters(Gs[tid], NUM_CLUSTERS, 'weight'),
+                       nx.pagerank(Ds[tid]))
 
 # subscribe to Redis To Go
 redistogo = True
