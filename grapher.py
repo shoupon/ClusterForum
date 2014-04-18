@@ -19,9 +19,13 @@ open_topics = set()
 count = {}
 PERIOD = 10 # run clustering every 5 updates
 NUM_CLUSTERS = 3
+WEIGHT = 'weight'
 MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
 DELTA = delta
+OPPOSE_W = 2
+SUPPORT_W = 5
+
 MONGOLAB = True
 
 # connect to MongoDB
@@ -74,7 +78,7 @@ def is_yesno(tid):
                 return False
  
 
-def adjust_preference(G, pid, cid, offset):
+def adjust_preference(G, D, pid, cid, offset):
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
     if not proxy:
         print 'Proxy not found: ' + str(ObjectId(pid))
@@ -87,37 +91,46 @@ def adjust_preference(G, pid, cid, offset):
     if 'approval_ids' in proxy.keys():
         for aidobj in proxy['approval_ids']:
             G[str(aidobj)][cid]['weight'] -= offset
+            if offset > 0:
+                print 'add_edge'
+                D.add_edge(cid, str(aidobj)) 
+            else:
+                if WEIGHT not in D[cid][str(aidobj)].keys():
+                    print 'remove_edge'
+                    D.remove_edge(cid, str(aidobj)) 
     if 'disapproval_ids' in proxy.keys():
         for didobj in proxy['disapproval_ids']:
             G[str(didobj)][cid]['weight'] += offset
 
-def like(G, pid, cid):
+def like(G, D, pid, cid):
     global delta
-    adjust_preference(G, pid, cid, delta)
-def unlike(G, pid, cid):
+    adjust_preference(G, D, pid, cid, delta)
+def unlike(G, D, pid, cid):
     global delta
-    adjust_preference(G, pid, cid, -delta)
+    adjust_preference(G, D, pid, cid, -delta)
 
-def dislike(G, pid, cid):
-    unlike(G, pid, cid)
+def dislike(G, D, pid, cid):
+    unlike(G, D, pid, cid)
 
-def undislike(G, pid, cid):
-    like(G, pid, cid)
+def undislike(G, D, pid, cid):
+    like(G, D, pid, cid)
 
-def create(G, pid, cid):
+def create(G, D, pid, cid):
     G.add_node(cid)
     for node in G.nodes():
         G.add_edge(cid, node)
         G[cid][node]['weight'] = 0
-    like(G, pid, cid)
+    like(G, D, pid, cid)
 
-def support(G, pid, cid):
-    print 'support'
+def support(G, D, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
+    D.add_edge(cid, pid)
+    D[pid][cid][WEIGHT] = SUPPORT_W
 
-def oppose(G, pid, cid):
-    print 'oppose'
+def oppose(G, D, pid, cid):
     G[pid][cid]['weight'] -= MULTIPLIER*DELTA
+    D.add_edge(cid, pid)
+    D[pid][cid][WEIGHT] = OPPOSE_W
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(tid, stances, ranking):
@@ -157,18 +170,19 @@ def update_stances(tid, stances, ranking):
                                                 "importance_factor":ranking[cid]}})
 
 
-def run_cluster(G0, tid):
+def run_cluster(G0, D0, tid):
     print 'Clustering worker spawned'
     if hasattr(os, 'getppid'):
         print 'parent process:', os.getppid()
     print 'process id:', os.getpid()
     G = G0.copy()
+    D = D0.copy()
 
     if len(G.nodes()) < NUM_CLUSTERS:
         stances = clusters(G, 1, 'weight') 
     else:
         stances = clusters(G, NUM_CLUSTERS, 'weight') 
-    update_stances(tid, stances)
+    update_stances(tid, stances, nx.pagerank(D))
 
 def process_job(job):
     global Gs
@@ -187,26 +201,26 @@ def process_job(job):
 
     y = job['action']
     if y == 'like':
-        like(Gs[tid], pid, cid)
+        like(Gs[tid], Ds[tid], pid, cid)
     elif y == 'unlike':
-        unlike(Gs[tid], pid, cid)
+        unlike(Gs[tid], Ds[tid], pid, cid)
     elif y == 'dislike':
-        dislike(Gs[tid], pid, cid)
+        dislike(Gs[tid], Ds[tid], pid, cid)
     elif y == 'undislike':
-        undislike(Gs[tid], pid, cid)
+        undislike(Gs[tid], Ds[tid], pid, cid)
     elif y == 'create':
-        create(Gs[tid], pid, cid)
+        create(Gs[tid], Ds[tid], pid, cid)
     elif y == 'support':
-        support(Gs[tid], pid, cid)
+        support(Gs[tid], Ds[tid], pid, cid)
     elif y == 'oppose':
-        oppose(Gs[tid], pid, cid)
+        oppose(Gs[tid], Ds[tid], pid, cid)
     else:
         # should throw an exception here
         pass
 
     count[tid] += 1
     if count[tid] >= PERIOD:
-        p = Process(target=run_cluster, args=(Gs[tid],tid))
+        p = Process(target=run_cluster, args=(Gs[tid],Ds[tid],tid))
         p.start()
         count[tid] = 0
 
@@ -220,8 +234,6 @@ print 'Build graph from current content in MongoDB'
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['topic_id'])
-    #if is_yesno(tid):
-    #    continue
     cid = str(c['_id'])
     if tid not in Gs.keys():
         Gs[tid] = nx.Graph()
@@ -240,9 +252,11 @@ for c in comments:
     if 'opposing_ids' in c.keys():
         for oidobj in c['opposing_ids']:
             Ds[tid].add_edge(cid, str(oidobj))
+            Ds[tid][cid][str(oidobj)][WEIGHT] = OPPOSE_W
     if 'supporting_ids' in c.keys():
         for sidobj in c['supporting_ids']:
             Ds[tid].add_edge(cid, str(sidobj))
+            Ds[tid][cid][str(sidobj)][WEIGHT] = SUPPORT_W
     # Build weighted graph for clustering
     if is_yesno(tid):
         continue
