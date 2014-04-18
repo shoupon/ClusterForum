@@ -9,6 +9,7 @@ import urlparse
 from itertools import combinations, product
 from operator import itemgetter
 from multiprocessing import Process
+import time
 
 from clustering import clusters
 
@@ -158,6 +159,7 @@ def oppose(G, D, pid, cid):
 
 # stances are given in the form of clusters (dictionary)
 def update_stances(tid, stances, ranking):
+    start_time = time.time()
     if is_yesno(tid):
         for comments in stances.values():
             for cid in comments:
@@ -192,6 +194,8 @@ def update_stances(tid, stances, ranking):
             comments_collection.update({"_id":ObjectId(cid)}, 
                                        {"$set":{"stance_id":sidobj, 
                                                 "importance_factor":ranking[cid]}})
+    print 'Updating stances costs (updating database)'
+    print time.time() - start_time, "seconds"
 
 
 def run_cluster(G0, D0, tid):
@@ -202,11 +206,18 @@ def run_cluster(G0, D0, tid):
     G = G0.copy()
     D = D0.copy()
 
+    start_time = time.time()
     if len(G.nodes()) < NUM_CLUSTERS:
         stances = clusters(G, 1, 'weight') 
     else:
         stances = clusters(G, NUM_CLUSTERS, 'weight') 
-    update_stances(tid, stances, nx.pagerank(D))
+    print 'Clustering costs (k-mean)'
+    print time.time() - start_time, "seconds"
+    start_time = time.time()
+    ranking = nx.pagerank(D)
+    print 'PageRanking costs'
+    print time.time() - start_time, "seconds"
+    update_stances(tid, stances, ranking)
 
 def process_job(job):
     global Gs
@@ -256,6 +267,7 @@ def graph_status(G):
 
 
 print 'Build graph from current content in MongoDB'
+start_time = time.time()
 comments = comments_collection.find()
 for c in comments:
     tid = str(c['topic_id'])
@@ -315,6 +327,7 @@ for p in proxies:
     if 'approval_ids' in p.keys() and 'disapproval_ids' in p.keys():
         for (ai, di) in product(p['approval_ids'],p['disapproval_ids']):
             Gs[tid][str(ai)][str(di)]['weight'] += delta
+print time.time() - start_time, " seconds"
 
 print 'Assigning initial stances'
 for tid in Gs.keys():
