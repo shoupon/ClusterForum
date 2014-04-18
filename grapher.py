@@ -79,6 +79,8 @@ def is_yesno(tid):
  
 
 def adjust_preference(G, D, pid, cid, offset):
+    #for e in D.edges():
+    #    print e
     proxy = proxies_collection.find_one({"_id":ObjectId(pid)})
     if not proxy:
         print 'Proxy not found: ' + str(ObjectId(pid))
@@ -88,16 +90,20 @@ def adjust_preference(G, D, pid, cid, offset):
     #    print widobj['_id']
     #    print str(widobj['_id'])
     #    G[str(widobj['_id'])][cid]['weight'] -= offset
+    works = comments_collection.find({"owner_id":ObjectId(pid)})
+    for w in works:
+        widobj = w['_id']
+        if offset > 0:
+            #print 'add_edge: ' + str(widobj) + ',' + str(cid)
+            D.add_edge(str(widobj), cid) 
+        else:
+            #print 'remove_edge: ' + str(widobj) + ',' + str(cid)
+            if WEIGHT not in D[str(widobj)][cid].keys():
+                D.remove_edge(str(widobj), cid) 
+
     if 'approval_ids' in proxy.keys():
         for aidobj in proxy['approval_ids']:
             G[str(aidobj)][cid]['weight'] -= offset
-            if offset > 0:
-                print 'add_edge: ' + str(cid) + ',' + str(aidobj)
-                D.add_edge(cid, str(aidobj)) 
-            else:
-                if WEIGHT not in D[cid][str(aidobj)].keys():
-                    print 'remove_edge: ' + str(cid) + ',' + str(aidobj)
-                    D.remove_edge(cid, str(aidobj)) 
     if 'disapproval_ids' in proxy.keys():
         for didobj in proxy['disapproval_ids']:
             G[str(didobj)][cid]['weight'] += offset
@@ -186,7 +192,7 @@ def run_cluster(G0, D0, tid):
 
 def process_job(job):
     global Gs
-    print 'Job: ' + str(job)
+    #print 'Job: ' + str(job)
 
     tid = job['group']['$oid']
     if job['who']:
