@@ -5,6 +5,7 @@ import os
 import json
 from bson.objectid import ObjectId
 import networkx as nx
+import heapq
 import urlparse
 from itertools import combinations, product
 from operator import itemgetter
@@ -20,6 +21,7 @@ open_topics = set()
 count = {}
 PERIOD = 10 # run clustering every 5 updates
 NUM_CLUSTERS = 3
+NUM_SUGGESTIONS = 5
 WEIGHT = 'weight'
 MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
@@ -197,6 +199,17 @@ def update_stances(tid, stances, ranking):
     print 'Updating stances costs (updating database)'
     print time.time() - start_time, "seconds"
 
+def update_neighbors(G):
+    for c in G.nodes():
+        dist = {nbr:G[c][nbr][WEIGHT] for nbr in G.neighbors(c)}
+        #print dist
+        slist = heapq.nsmallest(NUM_SUGGESTIONS, dist, dist.__getitem__)
+        sobjlist = [ObjectId(x) for x in slist]
+        #print {x:dist[x] for x in slist}
+        comments_collection.update({"_id":ObjectId(c)},
+                                   {'$set':{'neighbors':[]}})
+        comments_collection.update({"_id":ObjectId(c)},
+                                   {'$push':{'neighbors':{'$each':sobjlist}}})
 
 def run_cluster(G0, D0, tid):
     print 'Clustering worker spawned'
@@ -331,6 +344,7 @@ print time.time() - start_time, " seconds"
 
 print 'Assigning initial stances'
 for tid in Gs.keys():
+    update_neighbors(Gs[tid])
     if len(Gs[tid].nodes()) < NUM_CLUSTERS:
         update_stances(tid,
                        clusters(Gs[tid], 1, 'weight'),
