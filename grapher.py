@@ -220,12 +220,18 @@ def run_cluster(G0, D0, tid):
     D = D0.copy()
 
     start_time = time.time()
+    update_neighbors(G)
+    print 'Updating nearest K-neighbors costs'
+    print time.time() - start_time, "seconds"
+
+    start_time = time.time()
     if len(G.nodes()) < NUM_CLUSTERS:
         stances = clusters(G, 1, 'weight') 
     else:
         stances = clusters(G, NUM_CLUSTERS, 'weight') 
     print 'Clustering costs (k-mean)'
     print time.time() - start_time, "seconds"
+
     start_time = time.time()
     ranking = nx.pagerank(D)
     print 'PageRanking costs'
