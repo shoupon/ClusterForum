@@ -23,13 +23,15 @@ PERIOD = 10 # run clustering every 5 updates
 NUM_CLUSTERS = 3
 NUM_SUGGESTIONS = 5
 WEIGHT = 'weight'
-MULTIPLIER = 3 # the supporting/opposing +/- MULTIPLIER*delta
+MULTIPLIER = 6 # the supporting/opposing +/- MULTIPLIER*delta
 delta = 1
 DELTA = delta
+DISLIKE_W = 2
 OPPOSE_W = 2
 SUPPORT_W = 6
 CREATE_W = 1.5
 
+TRACK_STANCES = False
 MONGOLAB = True
 
 # connect to MongoDB
@@ -112,21 +114,21 @@ def adjust_directed(D, pid, cid, upvote=True):
 
 def like(G, D, pid, cid):
     global delta
-    adjust_undirected(G, pid, cid, delta)
+    adjust_undirected(G, pid, cid, DELTA)
     adjust_directed(D, pid, cid, upvote=True)
 
 def unlike(G, D, pid, cid):
     global delta
-    adjust_undirected(G, pid, cid, -delta)
+    adjust_undirected(G, pid, cid, -DELTA)
     adjust_directed(D, pid, cid, upvote=False)
 
 def dislike(G, D, pid, cid):
     global delta
-    adjust_undirected(G, pid, cid, -delta)
+    adjust_undirected(G, pid, cid, -DELTA*DISLIKE_W)
 
 def undislike(G, D, pid, cid):
     global delta
-    adjust_undirected(G, pid, cid, delta)
+    adjust_undirected(G, pid, cid, DELTA*DISLIKE_W)
 
 def create(G, D, pid, cid):
     G.add_node(cid)
@@ -175,6 +177,10 @@ def update_stances(tid, stances, ranking):
         for cid in comments:
             c = comments_collection.find_one({"_id":ObjectId(cid)})
             s = stances_collection.find_one({'_id':c['stance_id']})
+            #num = s['number']
+            #if num == 3:
+            #    num = 2
+            #stance_counts[num] += 1
             stance_counts[s['number']] += 1
         while True:
             i = max(stance_counts.iteritems(), key=itemgetter(1))[0]
@@ -211,6 +217,11 @@ def update_neighbors(G):
         comments_collection.update({"_id":ObjectId(c)},
                                    {'$push':{'neighbors':{'$each':sobjlist}}})
 
+def update_ranking(ranking):
+    for cid in ranking.keys():
+        comments_collection.update({"_id":ObjectId(cid)},
+                                   {"$set":{"importance_factor":ranking[cid]}})
+
 def run_cluster(G0, D0, tid):
     print 'Clustering worker spawned'
     if hasattr(os, 'getppid'):
@@ -224,19 +235,24 @@ def run_cluster(G0, D0, tid):
     print 'Updating nearest K-neighbors costs'
     print time.time() - start_time, "seconds"
 
-    start_time = time.time()
-    if len(G.nodes()) < NUM_CLUSTERS:
-        stances = clusters(G, 1, 'weight') 
-    else:
-        stances = clusters(G, NUM_CLUSTERS, 'weight') 
-    print 'Clustering costs (k-mean)'
-    print time.time() - start_time, "seconds"
+    if TRACK_STANCES:
+        start_time = time.time()
+        if len(G.nodes()) < NUM_CLUSTERS:
+            stances = clusters(G, 1, 'weight') 
+        else:
+            stances = clusters(G, NUM_CLUSTERS, 'weight') 
+        print 'Clustering costs (k-mean)'
+        print time.time() - start_time, "seconds"
 
     start_time = time.time()
     ranking = nx.pagerank(D)
     print 'PageRanking costs'
     print time.time() - start_time, "seconds"
-    update_stances(tid, stances, ranking)
+    
+    if TRACK_STANCES:
+        update_stances(tid, stances, ranking)
+    else:
+        update_ranking(ranking)
 
 def process_job(job):
     global Gs
@@ -348,17 +364,20 @@ for p in proxies:
             Gs[tid][str(ai)][str(di)]['weight'] += delta
 print time.time() - start_time, " seconds"
 
-print 'Assigning initial stances'
+print 'Assigning initial stances and importance factors'
 for tid in Gs.keys():
     update_neighbors(Gs[tid])
-    if len(Gs[tid].nodes()) < NUM_CLUSTERS:
-        update_stances(tid,
-                       clusters(Gs[tid], 1, 'weight'),
-                       nx.pagerank(Ds[tid]))
+    if TRACK_STANCES:
+        if len(Gs[tid].nodes()) < NUM_CLUSTERS:
+            update_stances(tid,
+                           clusters(Gs[tid], 1, WEIGHT),
+                           nx.pagerank(Ds[tid]))
+        else:
+            update_stances(tid, 
+                           clusters(Gs[tid], NUM_CLUSTERS, WEIGHT),
+                           nx.pagerank(Ds[tid]))
     else:
-        update_stances(tid, 
-                       clusters(Gs[tid], NUM_CLUSTERS, 'weight'),
-                       nx.pagerank(Ds[tid]))
+        update_ranking(nx.pagerank(Ds[tid]))
 
 # subscribe to Redis To Go
 redistogo = True
