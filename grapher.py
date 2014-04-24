@@ -207,7 +207,7 @@ def update_stances(tid, stances, ranking):
 
 def update_neighbors(G):
     for c in G.nodes():
-        dist = {nbr:G[c][nbr][WEIGHT] for nbr in G.neighbors(c)}
+        dist = {nbr:G[c][nbr][WEIGHT] for nbr in G.neighbors(c) if nbr != c}
         #print dist
         slist = heapq.nsmallest(NUM_SUGGESTIONS, dist, dist.__getitem__)
         sobjlist = [ObjectId(x) for x in slist]
@@ -364,7 +364,7 @@ for p in proxies:
             Gs[tid][str(ai)][str(di)]['weight'] += delta
 print time.time() - start_time, " seconds"
 
-print 'Assigning initial stances and importance factors'
+print 'Assigning initial stances: and importance factors'
 for tid in Gs.keys():
     update_neighbors(Gs[tid])
     if TRACK_STANCES:
